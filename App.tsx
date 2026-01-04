@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppStep, VideoData } from './types';
 import { StepIndicator } from './components/StepIndicator';
 import { Button } from './components/Button';
@@ -94,7 +94,7 @@ export default function App() {
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Transcription failed.");
-      setStep(AppStep.UPLOAD); // Go back
+      setStep(AppStep.UPLOAD);
     } finally {
       setIsProcessing(false);
     }
@@ -119,32 +119,29 @@ export default function App() {
     }
   };
 
-  // === 新增：處理使用者上傳自定義圖片 ===
+  // === User Upload Logic ===
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 檢查是否為圖片
     if (!file.type.startsWith('image/')) {
-      setError('請上傳 JPG 或 PNG 圖片格式');
+      setError('Please upload a JPG or PNG image.');
       return;
     }
 
     const reader = new FileReader();
     reader.onload = (event) => {
       const result = event.target?.result as string;
-      // 更新狀態，將圖片換成使用者上傳的
       setData(prev => ({
         ...prev,
         imageBase64: result, 
         imageMimeType: file.type
       }));
-      // 直接跳轉到下一步 (預覽/下載)
       setStep(AppStep.PREVIEW_DOWNLOAD);
     };
     reader.readAsDataURL(file);
   };
-  // ===================================
+  // =========================
 
   const handleCreateVideo = async () => {
     if (!data.audioFile || !data.imageBase64) return;
@@ -155,7 +152,6 @@ export default function App() {
     setProgress(0);
 
     try {
-      // Initialize FFmpeg if needed
       await videoService.load((msg) => {
          setFfmpegLogs(prev => prev + '\n' + msg);
       });
@@ -176,7 +172,6 @@ export default function App() {
     }
   };
 
-  // Download helpers
   const downloadSrt = () => {
     const blob = new Blob([data.srtContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -214,12 +209,11 @@ export default function App() {
       </header>
 
       <main className="w-full max-w-2xl flex-1 flex flex-col">
-        {/* API Key Setup Screen */}
         {!hasApiKey ? (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-xl animate-fade-in">
              <h2 className="text-xl font-semibold mb-4 text-center">Setup Gemini API</h2>
              <p className="text-zinc-400 text-sm mb-6 text-center">
-               This app runs entirely in your browser but needs a Gemini API Key to generate subtitles and art.
+               This app runs entirely in your browser but needs a Gemini API Key.
                <br/>
                <a href="https://aistudio.google.com/apikey" target="_blank" className="text-blue-400 hover:underline">Get a free key here</a>
              </p>
@@ -240,7 +234,6 @@ export default function App() {
 
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-xl min-h-[400px] relative overflow-hidden transition-all duration-300">
                
-               {/* Error Banner */}
                {error && (
                  <div className="absolute top-0 left-0 right-0 bg-red-500/10 border-b border-red-500/20 text-red-400 p-3 text-sm flex justify-between items-center animate-slide-down">
                     <span>⚠️ {error}</span>
@@ -321,7 +314,7 @@ export default function App() {
                             <svg className="w-10 h-10 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                           </div>
                           <h3 className="text-xl font-semibold mb-2">Create Cover Art</h3>
-                          <p className="text-zinc-500 text-sm mb-8">AI will generate a cover based on the lyrics, or upload your own.</p>
+                          <p className="text-zinc-500 text-sm mb-8">Generate with AI or upload your own.</p>
                           
                           <Button 
                             onClick={handleGenerateImage} 
@@ -331,7 +324,6 @@ export default function App() {
                             ✨ Generate with AI
                           </Button>
 
-                          {/* === 修改點：新增上傳自定義圖片按鈕 === */}
                           <div className="relative w-full">
                             <input
                               type="file"
@@ -348,7 +340,6 @@ export default function App() {
                               </span>
                             </Button>
                           </div>
-                          {/* =================================== */}
                         </>
                       )}
                     </div>
@@ -441,14 +432,17 @@ export default function App() {
                         )}
                      </div>
                    </div>
-                </div>
-              </div>
-            )}
-          </main>
-    
-          <footer className="mt-12 text-zinc-600 text-sm">
-             Powered by Gemini Flash 2.5 & FFmpeg.wasm
-          </footer>
-        </div>
-      );
-    }
+                 )}
+
+               </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      <footer className="mt-12 text-zinc-600 text-sm">
+         Powered by Gemini Flash 2.5 & FFmpeg.wasm
+      </footer>
+    </div>
+  );
+}
