@@ -57,36 +57,34 @@ export const generateSrtFromAudio = async (audioFile: File): Promise<string> => 
   const ai = getAiClient();
   const audioPart = await fileToGenerativePart(audioFile);
 
+  // 🔴 修改重點：加入明確的「範例 (Example)」讓模型照抄格式
   const prompt = `
-    Listen to this audio file carefully. 
-    Your task is to transcribe the lyrics or spoken words into a strictly formatted SRT (SubRip Subtitle) file.
-    
-    LANGUAGE REQUIREMENT:
-    - If the audio contains Chinese, transcribe using Traditional Chinese (繁體中文), NOT Simplified Chinese.
-    - For other languages, transcribe in the original language.
-    
-    CRITICAL - SRT Format Requirements:
-    - Each subtitle block must have: sequence number, timing line, and text
-    - Timing format MUST be: HH:MM:SS,mmm --> HH:MM:SS,mmm
-    - HH = hours (00-99), MM = minutes (00-59), SS = seconds (00-59), mmm = milliseconds (000-999)
-    - Use comma (,) to separate seconds and milliseconds, NOT colon (:)
-    
-    Example of CORRECT format:
+    You are a professional subtitle generator.
+    Listen to the audio and output standard SRT format subtitles for the LYRICS only.
+
+    STRICT OUTPUT FORMAT EXAMPLE (Follow this layout exactly):
     1
-    00:00:05,200 --> 00:00:08,500
-    First line of lyrics
-    
+    00:00:00,000 --> 00:00:05,000
+    (Intro)
+
     2
-    00:00:09,100 --> 00:00:12,800
-    Second line of lyrics
-    
-    Rules:
-    1. Output ONLY the SRT content. No markdown, no code blocks, no explanations.
-    2. Timing must be as accurate as possible.
-    3. Skip long instrumental breaks or mark as [Instrumental].
-    4. Break lines naturally for readability.
+    00:00:05,000 --> 00:00:10,000
+    First line of the lyrics
+
+    3
+    00:00:10,000 --> 00:00:15,500
+    Second line of the lyrics
+
+    RULES:
+    1. Do NOT use markdown code blocks. Output raw text.
+    2. Do NOT add headers like "Lyrics" or title. Start directly with index 1.
+    3. Time format must be exactly HH:MM:SS,mmm.
+    4. Do NOT combine timestamp and text on the same line.
+    5. No [Instrumental], [Applause] or non-lyrics tags.
+    6. If there is no vocal, do not output anything for that period.
   `;
 
+  // 使用 gemini-2.5-flash (穩定版)
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
     contents: {
@@ -118,23 +116,19 @@ export const generateCoverImage = async (srtContent: string): Promise<{ data: st
     Do not include text on the image.
   `;
 
-  // Using gemini-2.5-flash-image for image generation as per guidelines for general image tasks
+  // 圖片生成維持使用 gemini-2.5-flash (或支援圖片的模型)
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-image',
+    model: 'gemini-2.5-flash',
     contents: {
       parts: [{ text: prompt }],
     },
-    config: {
-        // No responseMimeType for this model
-    }
   });
 
-  // Extract image from response
   for (const part of response.candidates?.[0]?.content?.parts || []) {
     if (part.inlineData) {
         return {
-            data: part.inlineData.data,
-            mimeType: part.inlineData.mimeType || 'image/png'
+            data: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`,
+            mimeType: part.inlineData.mimeType
         };
     }
   }
