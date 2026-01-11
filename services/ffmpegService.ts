@@ -131,6 +131,12 @@ export class VideoService {
       ctx.font = `bold ${fontSize}px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", Arial, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      
+      // Shadow for better visibility
+      ctx.shadowColor = "rgba(0,0,0,0.8)";
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
 
       const maxWidth = width - 100;
       const lines = this.wrapText(ctx, subtitle, maxWidth);
@@ -166,6 +172,7 @@ export class VideoService {
   /**
    * Parse SRT content (Updated for Robustness)
    * Handles both standard SRT and compact formats (same-line text)
+   * FIXED: Now supports variable length milliseconds (e.g. 0, 50, 480)
    */
   private parseSrtToSubtitles(srtContent: string): Array<{text: string, startSec: number, endSec: number}> {
     // 1. Normalize line endings and remove empty lines
@@ -175,11 +182,10 @@ export class VideoService {
     // SYNC_OFFSET: Adjust if subtitles are too early/late
     const SYNC_OFFSET = 0;
 
-    // 2. Regex to capture Timestamp and Optional Text on the same line
-    // Group 1: Start Time
-    // Group 2: End Time
-    // Group 3: Text (anything after the timestamp)
-    const timeRegex = /((?:\d{1,2}:)?\d{1,2}:\d{1,2}[,.]\d{3})\s*-->\s*((?:\d{1,2}:)?\d{1,2}:\d{1,2}[,.]\d{3})(.*)?/;
+    // 2. Regex Updated: 
+    // - \d{1,3} allows for 1, 2, or 3 digit milliseconds (e.g., :0, :50, :480)
+    // - Supports [:,.] as separators
+    const timeRegex = /((?:\d{1,2}:)?\d{1,2}:\d{1,2}[:.,]\d{1,3})\s*-->\s*((?:\d{1,2}:)?\d{1,2}:\d{1,2}[:.,]\d{1,3})(.*)?/;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -202,8 +208,8 @@ export class VideoService {
           let j = i + 1;
           while (j < lines.length) {
             const nextLine = lines[j];
-            // Stop if we hit another timestamp or a pure number (index)
-            if (timeRegex.test(nextLine) || /^\d+$/.test(nextLine)) {
+            // Stop if we hit another timestamp or a pure number (index) that looks like the start of next block
+            if (timeRegex.test(nextLine) || (/^\d+$/.test(nextLine) && j < lines.length - 1 && timeRegex.test(lines[j+1]))) {
               break;
             }
             text += (text ? ' ' : '') + nextLine;
@@ -223,7 +229,8 @@ export class VideoService {
 
   /**
    * Convert timestamp string to seconds
-   * Supports HH:MM:SS,mmm and MM:SS,mmm
+   * Supports HH:MM:SS,mmm / HH:MM:SS:mmm / MM:SS,mmm / MM:SS:mmm
+   * FIXED: Logic to correctly interpret "00:48:0" as MM:SS:ms instead of HH:MM:SS
    */
   private timeToSeconds(time: string): number | null {
     if (!time) return null;
@@ -234,34 +241,29 @@ export class VideoService {
     
     let hours = 0, minutes = 0, seconds = 0, ms = 0;
 
-    // Case: 00:00:22,200 (4 parts)
+    // Case: 00:00:22,200 (4 parts) -> Standard HH:MM:SS:ms
     if (parts.length === 4) {
       hours = parseInt(parts[0], 10) || 0;
       minutes = parseInt(parts[1], 10) || 0;
       seconds = parseInt(parts[2], 10) || 0;
       ms = parseInt(parts[3], 10) || 0;
     } 
-    // Case: 00:22,200 (3 parts)
+    // Case: 00:22,200 or 00:48:0 (3 parts)
+    // CRITICAL FIX: For lyric videos, we assume 3-part time is ALWAYS MM:SS:ms
+    // because "HH:MM:SS" (hours long) is extremely rare for a single song file 
+    // and causes "00:48:0" to be read as 48 minutes instead of 48 seconds.
     else if (parts.length === 3) {
-      const p1 = parseInt(parts[0], 10) || 0;
-      const p2 = parseInt(parts[1], 10) || 0;
-      const p3 = parseInt(parts[2], 10) || 0;
-      
-      // Logic: if p3 is large (milliseconds) or p2 is clearly seconds
-      // Usually SRT without hours is MM:SS,mmm
-      if (p3 > 59 || parts[2].length === 3) {
-        minutes = p1;
-        seconds = p2;
-        ms = p3;
-      } else {
-        hours = p1;
-        minutes = p2;
-        seconds = p3;
-      }
+      minutes = parseInt(parts[0], 10) || 0;
+      seconds = parseInt(parts[1], 10) || 0;
+      ms = parseInt(parts[2], 10) || 0;
     } else {
       return null;
     }
 
+    // Handle variable length milliseconds (e.g. "5" -> 5ms, "50" -> 50ms, "500" -> 500ms)
+    // Note: In some loose formats "5" might mean 500ms, but strict parsing is safer.
+    // Given the input mixed 0, 50, 480, we treat them as direct ms values.
+    
     return hours * 3600 + minutes * 60 + seconds + ms / 1000;
   }
 
